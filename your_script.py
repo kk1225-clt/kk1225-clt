@@ -1,0 +1,189 @@
+import pygame
+import random
+import sys
+from pygame.locals import *
+
+# 初始化 Pygame
+pygame.init()
+
+# 定义难度级别
+difficulties = {
+    '简单': {'game_time': 120, 'tiles_per_position': 2, 'bomb_limit': 2},
+    '困难': {'game_time': 90, 'tiles_per_position': 3, 'bomb_limit': 1},
+    '地狱': {'game_time': 60, 'tiles_per_position': 4, 'bomb_limit': 0}
+}
+current_difficulty = '简单'  # 默认难度
+
+# 定义常量
+WIDTH, HEIGHT = 600, 600
+TILE_SIZE = 100
+ROWS, COLS = 6, 6
+FPS = 30
+WHITE = (255, 255, 255)
+BG_COLOR = (200, 200, 200)
+FONT = pygame.font.SysFont('Arial', 36)
+
+# 创建窗口
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("消了个消")
+
+# 加载图案图片
+pattern_images = [pygame.transform.scale(pygame.image.load(f"D:/软件工程/pattern_{i}.png"), (TILE_SIZE, TILE_SIZE)) for i in range(1, 7)]
+
+# 加载炸弹图案和图标
+def load_image(path, size):
+    try:
+        img = pygame.image.load(path)
+        return pygame.transform.scale(img, size)
+    except pygame.error as e:
+        print(f"无法加载图像：{e}")
+        return None
+
+bomb_image = load_image("D:/软件工程/bomb.png", (TILE_SIZE, TILE_SIZE))
+bomb_icon = load_image("D:/软件工程/bomb.png", (50, 50))
+
+# 创建游戏板
+board = [[[None] for _ in range(COLS)] for _ in range(ROWS)]
+selected = []
+score = 0
+bomb_used = 0  # 炸弹使用次数
+
+# 创建一个 Clock 对象
+timer = pygame.time.Clock()
+
+# 初始化游戏
+def initialize_game(difficulty):
+    global GAME_TIME, bomb_limit
+    settings = difficulties[difficulty]
+    GAME_TIME = settings['game_time']
+    bomb_limit = settings['bomb_limit']
+
+# 显示开始界面
+def show_start_screen():
+    global current_difficulty
+    screen.fill(BG_COLOR)
+
+    start_screen_image = load_image("D:/软件工程/background.jpg", (WIDTH, HEIGHT))
+    if start_screen_image:
+        screen.blit(start_screen_image, (0, 0))
+
+    buttons = ['Easy', 'Hard', 'Very Hard', 'Click to Start']
+    button_positions = [(WIDTH / 2, 100), (WIDTH / 2, 200), (WIDTH / 2, 300), (WIDTH / 2, HEIGHT - 100)]
+
+    for text, pos in zip(buttons, button_positions):
+        rendered_text = FONT.render(text, True, WHITE)
+        screen.blit(rendered_text, rendered_text.get_rect(center=pos))
+
+    pygame.display.update()
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == MOUSEBUTTONDOWN:
+                x, y = event.pos
+                for i, rect in enumerate([FONT.render(text, True, WHITE).get_rect(center=pos) for text, pos in zip(buttons, button_positions)]):
+                    if rect.collidepoint(x, y):
+                        if i < 3:
+                            current_difficulty = ['简单', '困难', '地狱'][i]
+                        initialize_game(current_difficulty)
+                        return
+
+# 生成图案
+def generate_board():
+    for row in range(ROWS):
+        for col in range(COLS):
+            stack = [random.randint(0, len(pattern_images) - 1) for _ in range(random.randint(1, difficulties[current_difficulty]['tiles_per_position']))]
+            board[row][col] = stack
+
+# 绘制游戏板
+def draw_board():
+    screen.fill(BG_COLOR)
+    for row in range(ROWS):
+        for col in range(COLS):
+            if board[row][col]:
+                screen.blit(pattern_images[board[row][col][0]], (col * TILE_SIZE, row * TILE_SIZE))
+    draw_score()
+    draw_timer()
+    draw_toolbar()
+
+# 绘制分数、计时器、工具栏
+def draw_score():
+    score_text = FONT.render(f"Score: {score}", True, WHITE)
+    screen.blit(score_text, (10, 10))
+
+def draw_timer():
+    time_left = max(GAME_TIME * 1000 - (pygame.time.get_ticks() - start_ticks), 0)
+    timer_text = FONT.render(f"Time: {time_left // 1000:02d}:{(time_left // 10) % 100:02d}", True, WHITE)
+    screen.blit(timer_text, (WIDTH - 150, 10))
+
+def draw_toolbar():
+    if bomb_icon:
+        screen.blit(bomb_icon, (WIDTH - 60, HEIGHT - 70))
+        color = (0, 255, 0) if bomb_used < bomb_limit else (255, 0, 0)
+        pygame.draw.rect(screen, color, (WIDTH - 60, HEIGHT - 70, 50, 50), 2)
+
+# 显示胜利、失败、广告界面
+def show_end_screen(message, image_path, duration):
+    image = load_image(image_path, (WIDTH, HEIGHT))
+    if image:
+        screen.blit(image, (0, 0))
+    text = FONT.render(message, True, WHITE)
+    screen.blit(text, (WIDTH // 2 - 100, HEIGHT // 2))
+    pygame.display.flip()
+    pygame.time.wait(duration)
+
+# 检查胜利条件
+def check_win():
+    return all(not board[row][col] for row in range(ROWS) for col in range(COLS))
+
+# 主游戏循环
+def main():
+    global score, start_ticks
+    show_start_screen()
+    initialize_game(current_difficulty)
+    running = True
+    start_ticks = pygame.time.get_ticks()
+    generate_board()
+
+    while running:
+        timer.tick(FPS)
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
+            elif event.type == MOUSEBUTTONDOWN:
+                x, y = event.pos
+                if x > WIDTH - 60 and y > HEIGHT - 70:
+                    if bomb_used < bomb_limit:
+                        bomb_used += 1
+                        effect_bomb()
+                        continue
+                col, row = x // TILE_SIZE, y // TILE_SIZE
+                if 0 <= col < COLS and 0 <= row < ROWS and board[row][col]:
+                    if not selected or (selected and (row, col) != selected[0]):
+                        selected.append((row, col))
+                        if len(selected) == 2:
+                            r1, c1 = selected[0]
+                            r2, c2 = selected[1]
+                            if board[r1][c1][0] == board[r2][c2][0]:
+                                board[r1][c1].pop(0)
+                                board[r2][c2].pop(0)
+                                score += 20
+                            selected.clear()
+
+        draw_board()
+        pygame.display.flip()
+
+        if check_win():
+            show_end_screen("You Win!", "D:/软件工程/win.jpg", 5000)
+            running = False
+        elif max(GAME_TIME * 1000 - (pygame.time.get_ticks() - start_ticks), 0) == 0:
+            show_end_screen("You Lose!", "D:/软件工程/lose.jpg", 8000)
+            running = False
+
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
