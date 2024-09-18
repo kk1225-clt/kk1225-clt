@@ -187,3 +187,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+git add ad.jpg
+git add background.jpg
+git add win.jpg
+git add lose.jpg
+git add pattern_1.png
+git add pattern_2.png
+git add pattern_3.png
+git add pattern_4.png
+git add pattern_5.png
+git add pattern_6.png
